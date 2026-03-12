@@ -112,7 +112,7 @@ tr:hover td{background:#f0f7ff;}
 /* Calendrier */
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-top:10px;}
 .cal-header{font-size:.75rem;font-weight:700;text-align:center;padding:6px;color:var(--muted);}
-.cal-day{min-height:52px;border-radius:6px;padding:4px;font-size:.75rem;
+.cal-day{min-height:70px;border-radius:6px;padding:5px;font-size:.75rem;
   background:white;border:1px solid var(--border);cursor:default;}
 .cal-day .num{font-weight:700;font-size:.8rem;}
 .cal-day.today{border:2px solid var(--primary);}
@@ -120,8 +120,8 @@ tr:hover td{background:#f0f7ff;}
 .cal-day.has-res{background:#ede9fe;}
 .cal-day.has-both{background:linear-gradient(135deg,#e0f0ff 50%,#ede9fe 50%);}
 .cal-day.other-month{opacity:.35;}
-.cal-event{font-size:.65rem;padding:1px 4px;border-radius:3px;margin-top:2px;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cal-event{font-size:.68rem;padding:2px 5px;border-radius:3px;margin-top:2px;
+  white-space:normal;overflow:visible;word-break:break-word;line-height:1.3;}
 .ev-loc{background:#bfdbfe;color:#1e40af;}
 .ev-res{background:#ddd6fe;color:#5b21b6;}
 .cal-nav{display:flex;align-items:center;gap:12px;margin-bottom:8px;}
@@ -213,7 +213,7 @@ tr:hover td{background:#f0f7ff;}
       </div>
       <div class="form-group">
         <label>Date de début (retrait)</label>
-        <input type="date" id="r-debut">
+        <input type="date" id="r-debut" onchange="majDateFinR()">
       </div>
       <div class="form-group">
         <label>Date de fin (retour prévu)</label>
@@ -281,7 +281,7 @@ tr:hover td{background:#f0f7ff;}
       </div>
       <div class="form-group">
         <label>Date de retrait</label>
-        <input type="date" id="f-retrait">
+        <input type="date" id="f-retrait" onchange="majDateFinF()">
       </div>
       <div class="form-group">
         <label>Date prévisible retour</label>
@@ -473,6 +473,15 @@ async function save(){
   }
 }
 
+function normaliserDatesObjet(obj){
+  const champsDate=['dateRetrait','datePrevRetour','dateRetour','dateDebut','dateFin'];
+  const result={...obj};
+  champsDate.forEach(k=>{
+    if(result[k]) result[k]=normaliserDate(result[k]);
+  });
+  return result;
+}
+
 async function chargerDepuisSheets(){
   syncStatus(null,'Chargement...');
   document.getElementById('sync-dot').style.background='#fbbf24';
@@ -491,11 +500,11 @@ async function chargerDepuisSheets(){
     } else {
       // Sheets a des données → on les charge
       if(sheetsLocations.length>0){
-        locations=sheetsLocations;
+        locations=sheetsLocations.map(normaliserDatesObjet);
         localStorage.setItem('cf_locations',JSON.stringify(locations));
       }
       if(sheetsReservations.length>0){
-        reservations=sheetsReservations;
+        reservations=sheetsReservations.map(normaliserDatesObjet);
         localStorage.setItem('cf_reservations',JSON.stringify(reservations));
       }
       // Recalculer compteur
@@ -551,6 +560,36 @@ function calculerPrix(type,adh,tables,tMarron,tBlanche){
 }
 function majBancsR(){document.getElementById('r-bancs').value=(parseInt(document.getElementById('r-tables').value)||0)*2;}
 function majBancsF(){document.getElementById('f-bancs').value=(parseInt(document.getElementById('f-tables').value)||0)*2;}
+function majDateFinR(){
+  const debut=document.getElementById('r-debut').value;
+  if(!debut) return;
+  const d=new Date(debut);
+  d.setDate(d.getDate()+1);
+  const finStr=d.toISOString().split('T')[0];
+  const finInput=document.getElementById('r-fin');
+  // Mettre à jour la date min pour bloquer les dates antérieures
+  finInput.min=debut;
+  // Proposer début+1 seulement si le champ fin est vide ou antérieur au début
+  if(!finInput.value || finInput.value<=debut){
+    finInput.value=finStr;
+  }
+  calcPrixR();
+  verifierConflitFormR();
+}
+
+function majDateFinF(){
+  const retrait=document.getElementById('f-retrait').value;
+  if(!retrait) return;
+  const d=new Date(retrait);
+  d.setDate(d.getDate()+1);
+  const finStr=d.toISOString().split('T')[0];
+  const finInput=document.getElementById('f-prev-retour');
+  finInput.min=retrait;
+  if(!finInput.value || finInput.value<=retrait){
+    finInput.value=finStr;
+  }
+}
+
 function toggleAdherentR(){
   const t=document.getElementById('r-type').value;
   document.getElementById('r-grp-adh').style.display=t==='Association'?'none':'flex';
@@ -803,11 +842,11 @@ function renderCal(){
     const ds=new Date(y,m,d);
     const isToday=ds.toDateString()===today;
     const locs=locations.filter(l=>{
-      const s=new Date(l.dateRetrait),e=l.datePrevRetour?new Date(l.datePrevRetour):s;
+      const s=new Date(normaliserDate(l.dateRetrait)),e=l.datePrevRetour?new Date(normaliserDate(l.datePrevRetour)):s;
       return ds>=s&&ds<=e;
     });
     const resas=reservations.filter(r=>{
-      const s=new Date(r.dateDebut),e=new Date(r.dateFin);
+      const s=new Date(normaliserDate(r.dateDebut)),e=new Date(normaliserDate(r.dateFin));
       return ds>=s&&ds<=e;
     });
     let cls='cal-day';
@@ -816,7 +855,7 @@ function renderCal(){
     else if(locs.length)cls+=' has-loc';
     else if(resas.length)cls+=' has-res';
     let evs=locs.map(l=>`<div class="cal-event ev-loc">📋 ${l.nom.split(' ')[0]}</div>`).join('');
-    evs+=resas.map(r=>`<div class="cal-event ev-res">🗓️ ${r.nom.split(' ')[0]}</div>`).join('');
+    evs+=resas.map(r=>`<div class="cal-event ev-res" title="${r.nom}">🗓️ ${r.nom}</div>`).join('');
     grid.innerHTML+=`<div class="${cls}"><div class="num">${d}</div>${evs}</div>`;
   }
 }
@@ -824,7 +863,35 @@ function renderCal(){
 // ═══════════════════════════════════════════════
 // HELPERS AFFICHAGE
 // ═══════════════════════════════════════════════
-function fmtDate(d){if(!d)return'—';const[y,mo,j]=d.split('-');return`${j}/${mo}/${y}`;}
+function normaliserDate(d){
+  if(!d) return '';
+  // Déjà au format YYYY-MM-DD
+  if(typeof d==='string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  // Format ISO complet (ex: 2026-05-22T22:00:00.000Z)
+  if(typeof d==='string' && d.includes('T')){
+    return d.split('T')[0];
+  }
+  // Objet Date ou timestamp
+  try{
+    const dt=new Date(d);
+    if(!isNaN(dt)){
+      // Utiliser UTC pour éviter le décalage de fuseau horaire
+      const y=dt.getUTCFullYear();
+      const mo=String(dt.getUTCMonth()+1).padStart(2,'0');
+      const j=String(dt.getUTCDate()).padStart(2,'0');
+      return `${y}-${mo}-${j}`;
+    }
+  }catch(e){}
+  return String(d);
+}
+function fmtDate(d){
+  if(!d) return '—';
+  const norm=normaliserDate(d);
+  if(!norm) return '—';
+  const parts=norm.split('-');
+  if(parts.length!==3) return norm;
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
 function badgeType(t){return t==='Association'?'<span class="badge badge-assoc">🤝 Asso.</span>':'<span class="badge badge-part">👤 Part.</span>';}
 function badgeAdh(a){
   if(a==='N/A')return'<span class="badge badge-assoc">—</span>';
@@ -990,8 +1057,14 @@ function toast(msg){
 // ═══════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════
-document.getElementById('f-retrait').value=new Date().toISOString().split('T')[0];
-document.getElementById('r-debut').value=new Date().toISOString().split('T')[0];
+const aujourdhui=new Date().toISOString().split('T')[0];
+const demain=new Date(Date.now()+86400000).toISOString().split('T')[0];
+document.getElementById('f-retrait').value=aujourdhui;
+document.getElementById('f-prev-retour').value=demain;
+document.getElementById('f-prev-retour').min=aujourdhui;
+document.getElementById('r-debut').value=aujourdhui;
+document.getElementById('r-fin').value=demain;
+document.getElementById('r-fin').min=aujourdhui;
 
 // Charger depuis Google Sheets au démarrage
 chargerDepuisSheets();
