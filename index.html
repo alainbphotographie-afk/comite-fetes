@@ -996,7 +996,7 @@ function rafraichir(){
   const tr=document.getElementById('table-reservations');
   if(tr){
     if(reservations.length===0)tr.innerHTML='<div class="alert alert-info">Aucune réservation enregistrée.</div>';
-    else tr.innerHTML=`<table><thead><tr><th>N°</th><th>Nom</th><th>Type</th><th>Adh.</th>
+    else tr.innerHTML=`<table><thead><tr><th>N°</th><th>Nom</th><th>🎉 Évènement</th><th>Type</th><th>Adh.</th>
       <th>Début</th><th>Fin</th><th>Tables</th><th>Bancs</th><th>T.Marron</th><th>T.Blanche</th>
       <th>Prix est.</th><th>Notes</th><th>Actions</th></tr></thead><tbody>`+
       reservations.map(r=>{
