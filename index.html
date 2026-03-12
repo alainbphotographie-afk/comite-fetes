@@ -200,6 +200,10 @@ tr:hover td{background:#f0f7ff;}
         <label>Nom emprunteur ou association</label>
         <input type="text" id="r-nom" placeholder="Ex: Le Ferrier de Tannerre...">
       </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>🎉 Évènement</label>
+        <input type="text" id="r-evenement" placeholder="Ex: Fête du village, Repas annuel, Kermesse...">
+      </div>
       <div class="form-group">
         <label>Type</label>
         <select id="r-type" onchange="toggleAdherentR()">
@@ -267,6 +271,10 @@ tr:hover td{background:#f0f7ff;}
       <div class="form-group" style="grid-column:1/-1">
         <label>Nom emprunteur ou association</label>
         <input type="text" id="f-nom" placeholder="Nom complet...">
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>🎉 Évènement</label>
+        <input type="text" id="f-evenement" placeholder="Ex: Fête du village, Repas annuel, Kermesse...">
       </div>
       <div class="form-group">
         <label>Type</label>
@@ -688,6 +696,7 @@ function verifierConflitFormR(){
 // ═══════════════════════════════════════════════
 function ajouterReservation(){
   const nom=document.getElementById('r-nom').value.trim();
+  const rEv=document.getElementById('r-evenement'); const evenement=rEv?rEv.value.trim():'';
   const type=document.getElementById('r-type').value;
   const adh=type==='Association'?'N/A':document.getElementById('r-adherent').value;
   const debut=document.getElementById('r-debut').value;
@@ -701,11 +710,11 @@ function ajouterReservation(){
   if(new Date(fin)<new Date(debut)){toast('⚠️ La date de fin doit être après le début.');return;}
   if(tables===0&&tm===0&&tb===0){toast('⚠️ Sélectionnez au moins un article.');return;}
   const prix=calculerPrix(type,adh,tables,tm,tb);
-  reservations.push({id:'R'+String(compteur).padStart(3,'0'),nom,type,adherent:adh,
+  reservations.push({id:'R'+String(compteur).padStart(3,'0'),nom,evenement,type,adherent:adh,
     dateDebut:debut,dateFin:fin,tables,bancs,tenteMarron:tm,tenteBlanche:tb,prix,notes,statut:'Prévisionnelle'});
   compteur++;save();
   // reset
-  ['r-nom','r-debut','r-fin','r-notes'].forEach(id=>document.getElementById(id).value='');
+  ['r-nom','r-evenement','r-debut','r-fin','r-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   ['r-tables','r-bancs','r-tmarron','r-tblanche'].forEach(id=>document.getElementById(id).value=0);
   document.getElementById('r-prix').textContent='0 €';
   document.getElementById('r-conflict-warn').style.display='none';
@@ -717,6 +726,7 @@ function ajouterReservation(){
 // ═══════════════════════════════════════════════
 function ajouterLocation(){
   const nom=document.getElementById('f-nom').value.trim();
+  const fEv=document.getElementById('f-evenement'); const evenement=fEv?fEv.value.trim():'';
   const type=document.getElementById('f-type').value;
   const adh=type==='Association'?'N/A':document.getElementById('f-adherent').value;
   const retrait=document.getElementById('f-retrait').value;
@@ -736,11 +746,11 @@ function ajouterLocation(){
   if(tm>STOCK.tenteMarron-marronEnc){toast(`⚠️ Seulement ${STOCK.tenteMarron-marronEnc} tente(s) marron disponible(s).`);return;}
   if(tb>STOCK.tenteBlanche-blancheEnc){toast(`⚠️ Seulement ${STOCK.tenteBlanche-blancheEnc} tente(s) blanche disponible(s).`);return;}
   const prix=calculerPrix(type,adh,tables,tm,tb);
-  locations.push({id:'L'+String(compteur).padStart(3,'0'),nom,type,adherent:adh,
+  locations.push({id:'L'+String(compteur).padStart(3,'0'),nom,evenement,type,adherent:adh,
     dateRetrait:retrait,datePrevRetour:prevRetour,dateRetour:'',
     tables,bancs,tenteMarron:tm,tenteBlanche:tb,prix,etatRetour:'',notes:''});
   compteur++;save();
-  ['f-nom','f-retrait','f-prev-retour'].forEach(id=>document.getElementById(id).value='');
+  ['f-nom','f-evenement','f-retrait','f-prev-retour'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   ['f-tables','f-bancs','f-tmarron','f-tblanche'].forEach(id=>document.getElementById(id).value=0);
   document.getElementById('f-prix').textContent='0 €';
   rafraichir();toast('✅ Location enregistrée !');
@@ -854,7 +864,7 @@ function renderCal(){
     else if(locs.length)cls+=' has-loc';
     else if(resas.length)cls+=' has-res';
     let evs=locs.map(l=>`<div class="cal-event ev-loc">📋 ${l.nom.split(' ')[0]}</div>`).join('');
-    evs+=resas.map(r=>`<div class="cal-event ev-res" title="${r.nom}">🗓️ ${r.nom}</div>`).join('');
+    evs+=resas.map(r=>{const ev=r.evenement?" — "+r.evenement:"";return'<div class="cal-event ev-res" title="'+r.nom+ev+'">🗓️ '+r.nom+(r.evenement?'<br><em>'+r.evenement+"</em>":"")+'</div>';}).join('');
     grid.innerHTML+=`<div class="${cls}"><div class="num">${d}</div>${evs}</div>`;
   }
 }
@@ -970,7 +980,7 @@ function rafraichir(){
         const conflict=conflits.find(c=>c.id===r.id);
         return`<tr${conflict?' class="conflict-row"':''}>
           <td><strong>${r.id}</strong>${conflict?'<span class="badge badge-conf" style="margin-left:4px">⚠️</span>':''}</td>
-          <td>${r.nom}</td><td>${badgeType(r.type)}</td><td>${badgeAdh(r.adherent)}</td>
+          <td>${r.nom}</td><td>${r.evenement||'—'}</td><td>${badgeType(r.type)}</td><td>${badgeAdh(r.adherent)}</td>
           <td>${fmtDate(r.dateDebut)}</td><td>${fmtDate(r.dateFin)}</td>
           <td>${r.tables}</td><td>${r.bancs}</td><td>${r.tenteMarron}</td><td>${r.tenteBlanche}</td>
           <td><strong>${r.prix} €</strong></td><td>${r.notes||'—'}</td>
@@ -1030,13 +1040,14 @@ function tableMini(list,type){
 }
 
 function tableLocations(list,avecActions=true){
-  return`<table><thead><tr><th>N°</th><th>Nom</th><th>Type</th><th>Adh.</th>
+  return`<table><thead><tr><th>N°</th><th>Nom</th><th>🎉 Évènement</th><th>Type</th><th>Adh.</th>
     <th>Retrait</th><th>Prév. retour</th><th>Retour réel</th>
     <th>Tables</th><th>Bancs</th><th>T.Marron</th><th>T.Blanche</th>
     <th>Prix</th><th>État</th>${avecActions?'<th>Actions</th>':'<th>Notes</th>'}
     </tr></thead><tbody>`+
     list.map(l=>`<tr>
       <td><strong>${l.id}</strong></td><td>${l.nom}</td>
+      <td>${l.evenement||'—'}</td>
       <td>${badgeType(l.type)}</td><td>${badgeAdh(l.adherent)}</td>
       <td>${fmtDate(l.dateRetrait)}</td><td>${fmtDate(l.datePrevRetour)}</td><td>${fmtDate(l.dateRetour)}</td>
       <td>${l.tables}</td><td>${l.bancs}</td><td>${l.tenteMarron}</td><td>${l.tenteBlanche}</td>
