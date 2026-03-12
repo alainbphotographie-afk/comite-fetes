@@ -468,12 +468,12 @@ async function save(){
     await fetch(API_URL,{
       method:'POST',
       headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({action:'save',sheet:'Locations',data:locations})
+      body:JSON.stringify({action:'save',sheet:'Locations',data:locations.map(ordreCleLocation)})
     });
     await fetch(API_URL,{
       method:'POST',
       headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({action:'save',sheet:'Reservations',data:reservations})
+      body:JSON.stringify({action:'save',sheet:'Reservations',data:reservations.map(ordreReservation)})
     });
     syncStatus(true,'✅ Synchronisé');
   }catch(e){
@@ -490,6 +490,29 @@ function normaliserDatesObjet(obj){
   return result;
 }
 
+// Garantit un ordre fixe des colonnes pour Sheets (évite les décalages)
+function ordreCleLocation(o){
+  return {
+    id:o.id||'', nom:o.nom||'', evenement:o.evenement||'',
+    type:o.type||'', adherent:o.adherent||'',
+    dateRetrait:o.dateRetrait||'', datePrevRetour:o.datePrevRetour||'',
+    dateRetour:o.dateRetour||'',
+    tables:o.tables||0, bancs:o.bancs||0,
+    tenteMarron:o.tenteMarron||0, tenteBlanche:o.tenteBlanche||0,
+    prix:o.prix||0, etatRetour:o.etatRetour||'', notes:o.notes||''
+  };
+}
+function ordreReservation(o){
+  return {
+    id:o.id||'', nom:o.nom||'', evenement:o.evenement||'',
+    type:o.type||'', adherent:o.adherent||'',
+    dateDebut:o.dateDebut||'', dateFin:o.dateFin||'',
+    tables:o.tables||0, bancs:o.bancs||0,
+    tenteMarron:o.tenteMarron||0, tenteBlanche:o.tenteBlanche||0,
+    prix:o.prix||0, notes:o.notes||'', statut:o.statut||'Prévisionnelle'
+  };
+}
+
 async function chargerDepuisSheets(){
   syncStatus(null,'Chargement...');
   document.getElementById('sync-dot').style.background='#fbbf24';
@@ -500,8 +523,8 @@ async function chargerDepuisSheets(){
     const sheetsReservations=(d.reservations||[]).filter(x=>x.id);
 
     // Google Sheets est TOUJOURS la source de vérité
-    locations=sheetsLocations.map(normaliserDatesObjet);
-    reservations=sheetsReservations.map(normaliserDatesObjet);
+    locations=sheetsLocations.map(o=>ordreCleLocation(normaliserDatesObjet(o)));
+    reservations=sheetsReservations.map(o=>ordreReservation(normaliserDatesObjet(o)));
 
     // Mettre à jour le cache local
     localStorage.setItem('cf_locations',JSON.stringify(locations));
@@ -526,8 +549,8 @@ async function chargerDepuisSheets(){
     syncStatus(false,'⚠️ Mode hors ligne');
     const cachedLoc=localStorage.getItem('cf_locations');
     const cachedRes=localStorage.getItem('cf_reservations');
-    if(cachedLoc) locations=JSON.parse(cachedLoc).map(normaliserDatesObjet);
-    if(cachedRes) reservations=JSON.parse(cachedRes).map(normaliserDatesObjet);
+    if(cachedLoc) locations=JSON.parse(cachedLoc).map(o=>ordreCleLocation(normaliserDatesObjet(o)));
+    if(cachedRes) reservations=JSON.parse(cachedRes).map(o=>ordreReservation(normaliserDatesObjet(o)));
     toast('⚠️ Hors ligne — données locales utilisées');
     rafraichir();
   }
@@ -538,12 +561,12 @@ async function forcerSyncVersSheets(){
     await fetch(API_URL,{
       method:'POST',
       headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({action:'save',sheet:'Locations',data:locations})
+      body:JSON.stringify({action:'save',sheet:'Locations',data:locations.map(ordreCleLocation)})
     });
     await fetch(API_URL,{
       method:'POST',
       headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({action:'save',sheet:'Reservations',data:reservations})
+      body:JSON.stringify({action:'save',sheet:'Reservations',data:reservations.map(ordreReservation)})
     });
   }catch(e){
     syncStatus(false,'⚠️ Erreur sync');
