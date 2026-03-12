@@ -488,36 +488,39 @@ async function chargerDepuisSheets(){
   try{
     const res=await fetch(API_URL+'?action=load');
     const d=await res.json();
-    const sheetsLocations = d.locations || [];
-    const sheetsReservations = d.reservations || [];
+    const sheetsLocations=(d.locations||[]).filter(x=>x.id);
+    const sheetsReservations=(d.reservations||[]).filter(x=>x.id);
 
-    // Si Google Sheets est vide ET qu'on a des données locales → pousser le local vers Sheets
-    if(sheetsLocations.length===0 && sheetsReservations.length===0){
-      // Sheets vide : on pousse ce qu'on a en local (ou les données pré-chargées)
-      await forcerSyncVersSheets();
-      syncStatus(true,'✅ Synchronisé');
-      toast('☁️ Données initiales envoyées vers Google Sheets');
+    // Google Sheets est TOUJOURS la source de vérité
+    locations=sheetsLocations.map(normaliserDatesObjet);
+    reservations=sheetsReservations.map(normaliserDatesObjet);
+
+    // Mettre à jour le cache local
+    localStorage.setItem('cf_locations',JSON.stringify(locations));
+    localStorage.setItem('cf_reservations',JSON.stringify(reservations));
+
+    // Recalculer le compteur depuis les IDs existants
+    const ids=[...locations,...reservations]
+      .map(x=>parseInt((x.id||'').replace(/[^0-9]/g,''))||0);
+    compteur=(ids.length>0?Math.max(...ids):0)+1;
+    localStorage.setItem('cf_cpt',compteur);
+
+    syncStatus(true,'✅ Synchronisé');
+    if(sheetsLocations.length===0&&sheetsReservations.length===0){
+      toast('ℹ️ Google Sheets vide — aucune donnée à charger');
     } else {
-      // Sheets a des données → on les charge
-      if(sheetsLocations.length>0){
-        locations=sheetsLocations.map(normaliserDatesObjet);
-        localStorage.setItem('cf_locations',JSON.stringify(locations));
-      }
-      if(sheetsReservations.length>0){
-        reservations=sheetsReservations.map(normaliserDatesObjet);
-        localStorage.setItem('cf_reservations',JSON.stringify(reservations));
-      }
-      // Recalculer compteur
-      const ids=[...locations,...reservations].map(x=>parseInt((x.id||'').replace(/[^0-9]/g,''))||0);
-      if(ids.length>0) compteur=Math.max(...ids)+1;
-      localStorage.setItem('cf_cpt',compteur);
-      syncStatus(true,'✅ Synchronisé');
-      toast('☁️ Données chargées depuis Google Sheets');
+      toast('☁️ Données chargées depuis Google Sheets ('+
+        (sheetsLocations.length+sheetsReservations.length)+' enregistrements)');
     }
     rafraichir();
   }catch(e){
+    // Hors ligne : utiliser le cache localStorage
     syncStatus(false,'⚠️ Mode hors ligne');
-    toast('⚠️ Google Sheets inaccessible — données locales utilisées');
+    const cachedLoc=localStorage.getItem('cf_locations');
+    const cachedRes=localStorage.getItem('cf_reservations');
+    if(cachedLoc) locations=JSON.parse(cachedLoc).map(normaliserDatesObjet);
+    if(cachedRes) reservations=JSON.parse(cachedRes).map(normaliserDatesObjet);
+    toast('⚠️ Hors ligne — données locales utilisées');
     rafraichir();
   }
 }
@@ -563,9 +566,7 @@ function majBancsF(){document.getElementById('f-bancs').value=(parseInt(document
 function majDateFinR(){
   const debut=document.getElementById('r-debut').value;
   if(!debut) return;
-  const d=new Date(debut);
-  d.setDate(d.getDate()+1);
-  const finStr=d.toISOString().split('T')[0];
+  const finStr=addJours(debut,1);
   const finInput=document.getElementById('r-fin');
   // Mettre à jour la date min pour bloquer les dates antérieures
   finInput.min=debut;
@@ -580,9 +581,7 @@ function majDateFinR(){
 function majDateFinF(){
   const retrait=document.getElementById('f-retrait').value;
   if(!retrait) return;
-  const d=new Date(retrait);
-  d.setDate(d.getDate()+1);
-  const finStr=d.toISOString().split('T')[0];
+  const finStr=addJours(retrait,1);
   const finInput=document.getElementById('f-prev-retour');
   finInput.min=retrait;
   if(!finInput.value || finInput.value<=retrait){
@@ -863,6 +862,13 @@ function renderCal(){
 // ═══════════════════════════════════════════════
 // HELPERS AFFICHAGE
 // ═══════════════════════════════════════════════
+function addJours(dateStr,n){
+  // Manipule la date comme string pour éviter tout problème UTC/fuseau
+  const[y,m,j]=dateStr.split('-').map(Number);
+  const d=new Date(y,m-1,j+n);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
 function normaliserDate(d){
   if(!d) return '';
   // Déjà au format YYYY-MM-DD
@@ -1057,8 +1063,9 @@ function toast(msg){
 // ═══════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════
-const aujourdhui=new Date().toISOString().split('T')[0];
-const demain=new Date(Date.now()+86400000).toISOString().split('T')[0];
+const now=new Date();
+const aujourdhui=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+const demain=addJours(aujourdhui,1);
 document.getElementById('f-retrait').value=aujourdhui;
 document.getElementById('f-prev-retour').value=demain;
 document.getElementById('f-prev-retour').min=aujourdhui;
@@ -1069,22 +1076,7 @@ document.getElementById('r-fin').min=aujourdhui;
 // Charger depuis Google Sheets au démarrage
 chargerDepuisSheets();
 
-// Pré-charger les 3 réservations de François Girard (seulement si vide)
-if(reservations.length===0){
-  reservations=[
-    {id:'R001',nom:'Le Ferrier de Tannerre',type:'Association',adherent:'N/A',
-     dateDebut:'2026-05-23',dateFin:'2026-05-25',tables:5,bancs:10,tenteMarron:1,tenteBlanche:0,prix:0,
-     notes:'5 tables (10 bancs inclus), 1 tente armée',statut:'Prévisionnelle'},
-    {id:'R002',nom:'Le Ferrier de Tannerre',type:'Association',adherent:'N/A',
-     dateDebut:'2026-06-13',dateFin:'2026-06-15',tables:10,bancs:20,tenteMarron:3,tenteBlanche:1,prix:0,
-     notes:'10 tables (20 bancs inclus), 3 tentes armée, tente blanche + vaisselle',statut:'Prévisionnelle'},
-    {id:'R003',nom:'Le Ferrier de Tannerre',type:'Association',adherent:'N/A',
-     dateDebut:'2026-08-01',dateFin:'2026-08-04',tables:10,bancs:20,tenteMarron:1,tenteBlanche:0,prix:0,
-     notes:'10 tables (20 bancs inclus), 1 tente armée',statut:'Prévisionnelle'}
-  ];
-  compteur=4;
-  save();
-}
+// Données gérées exclusivement via Google Sheets
 
 rafraichir();
 </script>
